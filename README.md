@@ -1,14 +1,18 @@
 # Hybrid Lane Detection
 
-A real-time lane detection pipeline that combines a fast **classical computer vision** path (Canny + Hough + 2nd-order polynomial fit with EMA smoothing) with a **deep-learning fallback** ([UFLDv2](https://github.com/cfzd/Ultra-Fast-Lane-Detection-V2) via ONNX Runtime). The classical backend runs every frame; the DL backend kicks in when classical confidence drops below a gate threshold.
+Real-time lane detection that runs **two backends concurrently** on every frame and renders both for direct comparison:
 
-The 4-tile debug view shows the full pipeline live:
+- **Classical CV** — Canny + Hough + 2nd-order polyfit + EMA smoothing, with a perspective-aware confidence score. Renders a green carpet between the two fitted lane curves.
+- **UFLD (Ultra-Fast Lane Detection)** — PyTorch inference via the [fast-lane-detection](https://github.com/afonsocosta90/fast-lane-detection) package. Renders red anchor-row points per detected lane.
+
+The 4-tile debug view shows the full pipeline:
 
 ```
 +----------------+----------------+
 |  1. ORIGINAL   |  2. GRAY+BLUR  |
 +----------------+----------------+
-|  3. CANNY+ROI  |  4. PREDICTION |
+|  3. CANNY+ROI  |  4. CLASSICAL  |
+|                |     + UFLD     |
 +----------------+----------------+
 ```
 
@@ -16,40 +20,55 @@ The 4-tile debug view shows the full pipeline live:
 
 ```
 hybrid-lane-detection/
-├── main.py                 # System orchestrator (the "Loop") + debug HUD
+├── main.py                 # System orchestrator + dual-backend rendering
 ├── config.py               # Camera intrinsics & warp points (WIP)
 ├── utils/
-│   └── data_types.py       # LaneData dataclass (bridge between backends)
+│   └── data_types.py       # LaneData dataclass (classical output)
 ├── models/
 │   ├── classical.py        # Canny / Hough / Polyfit + EMA + confidence
-│   └── dl_backend.py       # UFLDv2 wrapper (ONNX Runtime) — WIP
-├── weights/
-│   └── ufld_v2_res18.onnx  # Trained UFLDv2 weights (not in repo)
+│   └── dl_backend.py       # Thin wrapper over ufld.LaneDetector
+├── weights/                # UFLD checkpoints (not in repo — see weights/README)
 └── test-videos/            # Local dashcam clips (not in repo)
 ```
 
 ## Requirements
 
-- Python 3.11+ (3.14 wheels are pinned in [requirements.txt](requirements.txt))
+- **Python 3.11** (the `torch-directml` wheel for AMD on Windows is 3.11-only)
 - A webcam or dashcam clip in `test-videos/`
+- A UFLD CULane / Tusimple checkpoint in `weights/`
 
 ## Setup
 
 ```powershell
 # 1. Clone
-git clone https://github.com/<your-user>/hybrid-lane-detection.git
+git clone https://github.com/afonsocosta90/hybrid-lane-detection.git
 cd hybrid-lane-detection
 
-# 2. Create a virtualenv
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1     # Windows PowerShell
-# source .venv/bin/activate      # macOS / Linux
+# 2. Create a Python 3.11 virtualenv
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
 
-# 3. Install dependencies
+# 3. Install torch for your hardware (pick ONE):
+pip install torch-directml                                                       # AMD on Windows
+pip install torch --index-url https://download.pytorch.org/whl/cu121             # NVIDIA
+pip install torch                                                                # CPU only
+
+# 4. Install the rest
 pip install -r requirements.txt
 ```
 
-For GPU inference, swap `onnxruntime` for `onnxruntime-gpu` (requires CUDA 12.x).
+## Weights
+
+The UFLD backend needs a pretrained checkpoint. Place it at `weights/culane_18.pth`:
+
+| Dataset  | Backbone  | Filename             | Download                                                              |
+|----------|-----------|----------------------|-----------------------------------------------------------------------|
+| CULane   | ResNet-18 | `culane_18.pth`      | https://drive.google.com/file/d/1zXBRTw50WOzvUp6XKsi8Zrk3MUC3uFuq/view |
+| Tusimple | ResNet-18 | `tusimple_18.pth`    | https://drive.google.com/file/d/1WCYyur5ZaWczH15ecmeDowrW30xcLrCn/view |
+
+If the weights file is missing, the program still runs — the UFLD path is skipped and only the classical overlay is drawn. The HUD says `UFLD: OFF`.
+
+To switch dataset/backbone, edit the constants at the top of [main.py](main.py).
 
 ## Running
 
@@ -83,18 +102,23 @@ Controls:
 
 ### DL backend ([models/dl_backend.py](models/dl_backend.py))
 
-UFLDv2 ONNX wrapper — currently a placeholder, planned to run only when classical confidence drops below the gate.
+Thin wrapper around `ufld.LaneDetector` from the [fast-lane-detection](https://github.com/afonsocosta90/fast-lane-detection) package. UFLDv1 (Qin et al., ECCV 2020) — runs on AMD via DirectML, NVIDIA via CUDA, or CPU. Returns up to 4 lanes as lists of `(x, y)` pixel points sampled at fixed row anchors.
 
-### Bridge ([utils/data_types.py](utils/data_types.py))
+### Concurrency
 
-Both backends emit a `LaneData` dataclass (left/right polynomial fits + confidence + source tag) so downstream code stays agnostic to which path produced the result.
+Both backends run sequentially on the same frame inside the main loop. There's no threading yet — frame time is roughly `classical_time + UFLD_time`. The visualization draws both overlays on the prediction tile so you can directly compare where they agree and disagree.
 
 ## Roadmap
 
-- [ ] Implement UFLDv2 ONNX wrapper in `dl_backend.py`
-- [ ] Wire the confidence gate in `main.py` to switch backends
+- [x] Dual-backend concurrent rendering (classical + UFLD)
 - [ ] Bird's-eye-view warp in `config.py` for curvature & lane-offset metrics
 - [ ] Per-frame timing overlay in the HUD
+- [ ] Optional: move UFLD onto a worker thread to decouple frame rate
+
+## Credits
+
+- UFLDv1 architecture & weights: Qin, Wang, Li — *Ultra Fast Structure-aware Deep Lane Detection* (ECCV 2020)
+- Inference packaging: [fast-lane-detection](https://github.com/afonsocosta90/fast-lane-detection)
 
 ## License
 

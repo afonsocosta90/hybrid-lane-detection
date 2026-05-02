@@ -1,8 +1,13 @@
-# High-performance computer vision and math for Python 3.14
-# Versions bumped to releases that ship 3.14 wheels.
-opencv-python>=4.11.0
-numpy>=2.1.0
+# Computer vision and math
+opencv-python>=4.8.0
+numpy>=1.24.0
+scipy>=1.11.0
 
-# DL backend (UFLDv2 via ONNX Runtime). CPU build; swap for
-# onnxruntime-gpu if you have CUDA 12.x and want GPU inference.
-onnxruntime>=1.20.0
+# DL backend: UFLDv1 inference (PyTorch)
+ufld @ git+https://github.com/afonsocosta90/fast-lane-detection.git@main
+torchvision
+
+# torch is intentionally NOT listed here — pick the right wheel for your hardware:
+#   AMD on Windows : pip install torch-directml
+#   NVIDIA         : pip install torch --index-url https://download.pytorch.org/whl/cu121
+#   CPU only       : pip install torch
