@@ -2,8 +2,8 @@ import cv2
 import numpy as np
 import math
 
-from config import CONFIG, ClassicalConfig
-from utils.data_types import LaneData
+from ..config import CONFIG, ClassicalConfig
+from ..utils.data_types import LaneData
 
 
 class ClassicalBackend:

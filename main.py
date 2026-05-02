@@ -1,38 +1,17 @@
-import os
+"""Local demo runner. Loads a video, runs the hybrid detector, shows the
+4-tile debug view. For library use see hybrid_lane_detection/lane_detector.py."""
+import logging
+
 import cv2
 
-from config import CONFIG
-from models.classical import ClassicalBackend
-from models.dl_backend import DLBackend
-from renderers import LaneRenderer
-
-
-def try_init_dl():
-    """Load the UFLD backend, or return None so the program runs classical-only."""
-    cfg = CONFIG.dl
-    if not os.path.isfile(cfg.weights_path) or os.path.getsize(cfg.weights_path) == 0:
-        print(f"[warn] UFLD weights not found at '{cfg.weights_path}' — running classical only.")
-        print("       See weights/README.md for download links.")
-        return None
-    try:
-        return DLBackend(
-            weights_path=cfg.weights_path,
-            dataset=cfg.dataset,
-            backbone=cfg.backbone,
-            device=cfg.device,
-        )
-    except Exception as e:
-        print(f"[warn] Failed to init UFLD backend ({e}) — running classical only.")
-        return None
+from hybrid_lane_detection import CONFIG, HybridLaneDetector
 
 
 def main():
-    cap = cv2.VideoCapture(CONFIG.video.path)
-    classical = ClassicalBackend()
-    dl = try_init_dl()
-    renderer = LaneRenderer()
-    dl_active = dl is not None
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
+    detector = HybridLaneDetector()
+    cap = cv2.VideoCapture(CONFIG.video.path)
     is_paused = False
 
     while cap.isOpened():
@@ -41,13 +20,8 @@ def main():
             if not ret:
                 break
 
-            classical_data, gray, edges = classical.process(frame)
-            dl_result = dl.process(frame) if dl_active else None
-
-            debug_view = renderer.create_debug_tile(
-                frame, gray, edges, classical_data, dl_result, dl_active
-            )
-            cv2.imshow(CONFIG.video.window_name, debug_view)
+            result = detector.process(frame)
+            cv2.imshow(CONFIG.video.window_name, detector.render_debug(frame, result))
 
         key = cv2.waitKey(CONFIG.video.wait_key_ms) & 0xFF
         if key == ord(' '):

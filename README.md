@@ -20,16 +20,20 @@ The 4-tile debug view shows the full pipeline:
 
 ```
 hybrid-lane-detection/
-├── main.py                 # System orchestrator: capture, backends, key loop
-├── config.py               # ALL tunables — video, DL, classical CV, rendering
-├── renderers.py            # LaneRenderer — overlays, HUD, 4-tile debug view
-├── utils/
-│   └── data_types.py       # LaneData dataclass (classical output)
-├── models/
-│   ├── classical.py        # Canny / Hough / Polyfit + EMA + confidence
-│   └── dl_backend.py       # Thin wrapper over ufld.LaneDetector
-├── weights/                # UFLD checkpoints (not in repo — see weights/README)
-└── test-videos/            # Local dashcam clips (not in repo)
+├── main.py                            # Demo runner (uses the package below)
+├── pyproject.toml                     # Installable as a pip package
+├── hybrid_lane_detection/             # The importable package
+│   ├── __init__.py                    # Public API: HybridLaneDetector, LaneResult, ...
+│   ├── lane_detector.py               # HybridLaneDetector wrapper (THE entry point)
+│   ├── config.py                      # ALL tunables — video, DL, classical CV, rendering
+│   ├── renderers.py                   # LaneRenderer — overlays, HUD, 4-tile debug view
+│   ├── utils/
+│   │   └── data_types.py              # LaneData dataclass (classical output)
+│   └── models/
+│       ├── classical.py               # Canny / Hough / Polyfit + EMA + confidence
+│       └── dl_backend.py              # Thin wrapper over ufld.LaneDetector
+├── weights/                           # UFLD checkpoints (not in repo — see weights/README)
+└── test-videos/                       # Local dashcam clips (not in repo)
 ```
 
 ## Configuration
@@ -88,7 +92,7 @@ If the weights file is missing, the program still runs — the UFLD path is skip
 
 To switch dataset/backbone, edit `CONFIG.dl` in [config.py](config.py).
 
-## Running
+## Running the demo
 
 Drop a dashcam clip into `test-videos/` (default expected name: `test_video_0.mp4`, configurable via `CONFIG.video.path`) and run:
 
@@ -102,6 +106,49 @@ Controls:
 | --------- | -------------------- |
 | `Space`   | Pause / resume       |
 | `q`       | Quit                 |
+
+## Using as a library in another project
+
+The repo is pip-installable directly from GitHub:
+
+```powershell
+pip install git+https://github.com/afonsocosta90/hybrid-lane-detection.git
+```
+
+Then in your code:
+
+```python
+import cv2
+from hybrid_lane_detection import HybridLaneDetector
+
+detector = HybridLaneDetector(weights_path="path/to/culane_18.pth")
+
+cap = cv2.VideoCapture(0)
+while True:
+    ok, frame = cap.read()
+    if not ok:
+        break
+
+    result = detector.process(frame)
+
+    # Headless: structured data for downstream fusion
+    #   result.classical.left_fit / .right_fit  (np.poly2 coeffs, x = a*y^2 + b*y + c)
+    #   result.classical.confidence              (float 0..1)
+    #   result.dl                                (ufld.LaneResult or None)
+    #   result.gray, result.edges                (intermediates, reusable)
+    print(result.classical.confidence, detector.dl_active)
+
+    # Optional: rendered overlay if you want to display the result
+    overlay = detector.render(frame, result)
+    cv2.imshow("lanes", overlay)
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+```
+
+`HybridLaneDetector` accepts an optional `config: Config` for per-instance overrides
+(e.g. a different ROI for a different camera). If `weights_path` is omitted, missing,
+or empty, the UFLD backend is skipped and only the classical pipeline runs —
+`detector.dl_active` reports the resolved state.
 
 ## How it works
 

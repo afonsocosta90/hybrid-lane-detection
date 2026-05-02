@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-from config import CONFIG, RenderConfig
+from .config import CONFIG, RenderConfig
 
 
 class LaneRenderer:

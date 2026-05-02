@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hybrid-lane-detection"
+version = "0.1.0"
+description = "Hybrid (classical CV + UFLD deep learning) lane detection pipeline."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Afonso Costa", email = "afonsocosta90@gmail.com" }]
+dependencies = [
+    "opencv-python>=4.8.0",
+    "numpy>=1.24.0",
+    "scipy>=1.11.0",
+    "torchvision",
+    "ufld @ git+https://github.com/afonsocosta90/fast-lane-detection.git@main",
+]
+
+# torch is intentionally NOT listed — consumers must install the wheel that matches
+# their hardware (torch-directml for AMD on Windows, CUDA wheels for NVIDIA, or CPU).
+
+[project.urls]
+Repository = "https://github.com/afonsocosta90/hybrid-lane-detection"
+
+[tool.setuptools.packages.find]
+include = ["hybrid_lane_detection*"]
+exclude = ["test-videos*", "weights*"]
