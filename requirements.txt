@@ -1,0 +1,8 @@
+# High-performance computer vision and math for Python 3.14
+# Versions bumped to releases that ship 3.14 wheels.
+opencv-python>=4.11.0
+numpy>=2.1.0
+
+# DL backend (UFLDv2 via ONNX Runtime). CPU build; swap for
+# onnxruntime-gpu if you have CUDA 12.x and want GPU inference.
+onnxruntime>=1.20.0

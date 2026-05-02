@@ -1,0 +1,60 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribution / packaging
+build/
+dist/
+*.egg
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Caches & coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+
+# --- IDE / editors ---
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Project-specific ---
+# Large dashcam clips — keep local only
+test-videos/*.mp4
+test-videos/*.avi
+test-videos/*.mov
+test-videos/*.mkv
+
+# Model weights (downloaded separately)
+weights/*.onnx
+weights/*.pt
+weights/*.pth
+weights/*.engine
+weights/*.trt
+
+# Logs / debug output
+*.log
+output/
+runs/
