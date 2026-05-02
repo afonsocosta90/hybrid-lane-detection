@@ -1,26 +1,25 @@
 import cv2
 import numpy as np
 import math
+
+from config import CONFIG, ClassicalConfig
 from utils.data_types import LaneData
 
 
 class ClassicalBackend:
-    # EMA smoothing factor for polynomial coefficients (0..1, larger = more responsive)
-    EMA_ALPHA = 0.3
-    # Raw confidence below this is treated as untrusted: the EMA is not updated.
-    MIN_TRUST = 0.4
-
-    def __init__(self):
+    def __init__(self, cfg: ClassicalConfig = CONFIG.classical):
+        self.cfg = cfg
         self._left_ema = None
         self._right_ema = None
 
     def process(self, frame: np.ndarray):
+        cfg = self.cfg
         h, w = frame.shape[:2]
 
         # 1. Pre-processing
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        blur = cv2.GaussianBlur(gray, (5, 5), 0)
-        edges = cv2.Canny(blur, 50, 150)
+        blur = cv2.GaussianBlur(gray, cfg.blur_kernel, 0)
+        edges = cv2.Canny(blur, cfg.canny_low, cfg.canny_high)
 
         # 2. Apply ROI Mask
         masked_edges = self._apply_roi_mask(edges)
@@ -28,11 +27,11 @@ class ClassicalBackend:
         # 3. Line Detection
         lines = cv2.HoughLinesP(
             masked_edges,
-            1,
-            np.pi / 180,
-            threshold=40,
-            minLineLength=100,
-            maxLineGap=10
+            cfg.hough_rho,
+            np.pi / cfg.hough_theta_divisor,
+            threshold=cfg.hough_threshold,
+            minLineLength=cfg.hough_min_line_length,
+            maxLineGap=cfg.hough_max_line_gap,
         )
 
         if lines is None:
@@ -41,7 +40,7 @@ class ClassicalBackend:
         # 4. Separate and Filter by Angle
         l_pts, r_pts = self._separate_and_filter(lines, w // 2)
 
-        if len(l_pts) < 5 or len(r_pts) < 5:
+        if len(l_pts) < cfg.min_points_per_side or len(r_pts) < cfg.min_points_per_side:
             return self._empty_data(), gray, masked_edges
 
         # 5. Polynomial Fit (x = a*y^2 + b*y + c)
@@ -53,7 +52,7 @@ class ClassicalBackend:
         raw_conf = self._calculate_confidence(l_fit, r_fit, h)
 
         # 7. Smooth coefficients across frames if the raw fit is trustworthy.
-        if raw_conf >= self.MIN_TRUST:
+        if raw_conf >= cfg.min_trust:
             l_fit, r_fit = self._smooth(l_fit, r_fit)
             conf = raw_conf
         elif self._left_ema is not None:
@@ -67,18 +66,15 @@ class ClassicalBackend:
         return LaneData(l_fit, r_fit, conf, 'classical'), gray, masked_edges
 
     def _calculate_confidence(self, l_fit, r_fit, h):
-        """
-        Perspective-aware sanity check. Evaluates the two polynomials at
-        a row near the car and a row near the horizon, then scores:
-        - lane width near the car (must be physically plausible),
-        - perspective convergence (far row narrower than near row),
-        - heading (left tangent points one way, right the other, mirrored).
-        """
+        """Perspective-aware sanity check. Evaluates the two polynomials at
+        a row near the car and a row near the horizon, then scores lane
+        width, perspective convergence, and heading symmetry."""
         if l_fit is None or r_fit is None:
             return 0.0
 
-        y_near = h - 50
-        y_far = int(h * 0.55)  # just below the ROI top in a 720-tall frame
+        cfg = self.cfg
+        y_near = h - cfg.y_near_offset_px
+        y_far = int(h * cfg.y_far_factor)
 
         def x_at(fit, y):
             return fit[0] * y * y + fit[1] * y + fit[2]
@@ -89,21 +85,27 @@ class ClassicalBackend:
         width_near = rx_near - lx_near
         width_far = rx_far - lx_far
 
-        # 1. Lane width near the car. Tuned for a 1280-wide dashcam.
-        if 500 <= width_near <= 1000:
+        # 1. Lane width near the car.
+        if cfg.width_min_px <= width_near <= cfg.width_max_px:
             width_score = 1.0
         else:
-            width_score = max(0.0, 1.0 - abs(width_near - 750) / 400.0)
+            width_score = max(
+                0.0,
+                1.0 - abs(width_near - cfg.width_target_px) / cfg.width_falloff_px,
+            )
 
-        # 2. Perspective convergence: far row should be narrower than near row.
+        # 2. Perspective convergence: far row should be narrower than near.
         if width_near <= 0:
             convergence_score = 0.0
         else:
-            ratio = width_far / width_near  # healthy: ~0.2-0.6
-            if 0.1 <= ratio <= 0.7:
+            ratio = width_far / width_near
+            if cfg.convergence_ratio_min <= ratio <= cfg.convergence_ratio_max:
                 convergence_score = 1.0
             else:
-                convergence_score = max(0.0, 1.0 - abs(ratio - 0.4) * 2.0)
+                convergence_score = max(
+                    0.0,
+                    1.0 - abs(ratio - cfg.convergence_ratio_target) * cfg.convergence_falloff,
+                )
 
         # 3. Heading: tangent dx/dy = 2*a*y + b. At y_near the left tangent
         #    should be negative, the right positive, and they should mirror.
@@ -115,11 +117,15 @@ class ClassicalBackend:
         else:
             heading_score = 0.0
 
-        score = 0.5 * width_score + 0.25 * convergence_score + 0.25 * heading_score
+        score = (
+            cfg.width_weight * width_score
+            + cfg.convergence_weight * convergence_score
+            + cfg.heading_weight * heading_score
+        )
         return float(np.clip(score, 0.0, 1.0))
 
     def _smooth(self, l_fit, r_fit):
-        a = self.EMA_ALPHA
+        a = self.cfg.ema_alpha
         if self._left_ema is None:
             self._left_ema = l_fit
             self._right_ema = r_fit
@@ -129,13 +135,13 @@ class ClassicalBackend:
         return self._left_ema, self._right_ema
 
     def _separate_and_filter(self, lines, midpoint):
+        cfg = self.cfg
         l_pts, r_pts = [], []
         for line in lines[:, 0]:
             x1, y1, x2, y2 = line
             angle = abs(math.degrees(math.atan2(y2 - y1, x2 - x1)))
 
-            # Wide angle filter for Normal Perspective (30 to 150 degrees)
-            if 30 < angle < 150:
+            if cfg.min_angle_deg < angle < cfg.max_angle_deg:
                 if (x1 + x2) / 2 < midpoint:
                     l_pts.extend([(x1, y1), (x2, y2)])
                 else:
@@ -149,8 +155,8 @@ class ClassicalBackend:
         polygon = np.array([[
             (0, h),
             (w, h),
-            (1050, 350),
-            (400, 350)
+            self.cfg.roi_top_right,
+            self.cfg.roi_top_left,
         ]], np.int32)
 
         cv2.fillPoly(mask, polygon, 255)

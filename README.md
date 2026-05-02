@@ -20,8 +20,9 @@ The 4-tile debug view shows the full pipeline:
 
 ```
 hybrid-lane-detection/
-├── main.py                 # System orchestrator + dual-backend rendering
-├── config.py               # Camera intrinsics & warp points (WIP)
+├── main.py                 # System orchestrator: capture, backends, key loop
+├── config.py               # ALL tunables — video, DL, classical CV, rendering
+├── renderers.py            # LaneRenderer — overlays, HUD, 4-tile debug view
 ├── utils/
 │   └── data_types.py       # LaneData dataclass (classical output)
 ├── models/
@@ -30,6 +31,23 @@ hybrid-lane-detection/
 ├── weights/                # UFLD checkpoints (not in repo — see weights/README)
 └── test-videos/            # Local dashcam clips (not in repo)
 ```
+
+## Configuration
+
+Every tunable parameter lives in [config.py](config.py), grouped into four
+frozen dataclasses so call sites read like `CONFIG.classical.ema_alpha`:
+
+| Group              | What lives there                                                        |
+|--------------------|-------------------------------------------------------------------------|
+| `CONFIG.video`     | Video path, OpenCV window title, frame delay (`waitKey` ms)             |
+| `CONFIG.dl`        | UFLD weights path, dataset, backbone, device                            |
+| `CONFIG.classical` | Blur / Canny / ROI / Hough / angle filter / EMA / confidence weights    |
+| `CONFIG.render`    | Carpet `y_top`, confidence gate, HUD geometry, debug-tile output size   |
+
+Switching to a different video or resolution? Edit `CONFIG.video.path` and,
+if the resolution changes, retune `CONFIG.classical.roi_top_left` /
+`roi_top_right` and the lane-width window (`width_min_px` / `width_max_px` /
+`width_target_px`). Everything else cascades automatically.
 
 ## Requirements
 
@@ -68,11 +86,11 @@ The UFLD backend needs a pretrained checkpoint. Place it at `weights/culane_18.p
 
 If the weights file is missing, the program still runs — the UFLD path is skipped and only the classical overlay is drawn. The HUD says `UFLD: OFF`.
 
-To switch dataset/backbone, edit the constants at the top of [main.py](main.py).
+To switch dataset/backbone, edit `CONFIG.dl` in [config.py](config.py).
 
 ## Running
 
-Drop a dashcam clip into `test-videos/` (default expected name: `test_video_1.mp4`) and run:
+Drop a dashcam clip into `test-videos/` (default expected name: `test_video_0.mp4`, configurable via `CONFIG.video.path`) and run:
 
 ```powershell
 python main.py

@@ -1,18 +1,21 @@
 import cv2
 import numpy as np
 
+from config import CONFIG, RenderConfig
+
+
 class LaneRenderer:
-    def __init__(self, render_y_top=500, render_conf_threshold=0.35):
-        self.render_y_top = render_y_top
-        self.render_conf_threshold = render_conf_threshold
+    def __init__(self, cfg: RenderConfig = CONFIG.render):
+        self.cfg = cfg
 
     def render_classical_overlay(self, frame, data):
-        if data.confidence < self.render_conf_threshold:
+        cfg = self.cfg
+        if data.confidence < cfg.confidence_threshold:
             return frame
 
         h, w = frame.shape[:2]
         overlay = frame.copy()
-        plot_y = np.linspace(self.render_y_top, h - 1, 30)
+        plot_y = np.linspace(cfg.render_y_top, h - 1, 30)
         l_x = data.left_fit[0] * plot_y ** 2 + data.left_fit[1] * plot_y + data.left_fit[2]
         r_x = data.right_fit[0] * plot_y ** 2 + data.right_fit[1] * plot_y + data.right_fit[2]
 
@@ -36,14 +39,12 @@ class LaneRenderer:
         return frame
 
     def draw_description(self, img, data, dl_active):
+        cfg = self.cfg
         w = img.shape[1]
-        box_width = 340
-        box_height = 130
-        margin = 10
-        tr_x1 = w - box_width - margin
-        tr_y1 = margin
-        tr_x2 = w - margin
-        tr_y2 = margin + box_height
+        tr_x1 = w - cfg.hud_box_width - cfg.hud_margin
+        tr_y1 = cfg.hud_margin
+        tr_x2 = w - cfg.hud_margin
+        tr_y2 = cfg.hud_margin + cfg.hud_box_height
 
         overlay = img.copy()
         cv2.rectangle(overlay, (tr_x1, tr_y1), (tr_x2, tr_y2), (0, 0, 0), -1)
@@ -52,8 +53,9 @@ class LaneRenderer:
         font = cv2.FONT_HERSHEY_SIMPLEX
         text_x = tr_x1 + 10
 
-        status_text = "LANE TRACKED" if data.confidence >= self.render_conf_threshold else "SEARCHING..."
-        status_color = (0, 255, 0) if data.confidence >= self.render_conf_threshold else (0, 0, 255)
+        tracked = data.confidence >= cfg.confidence_threshold
+        status_text = "LANE TRACKED" if tracked else "SEARCHING..."
+        status_color = (0, 255, 0) if tracked else (0, 0, 255)
         cv2.putText(img, status_text, (text_x, tr_y1 + 30), font, 0.7, status_color, 2)
         cv2.putText(img, f"Classical conf: {data.confidence * 100:.1f}%", (text_x, tr_y1 + 60), font, 0.55, (0, 255, 0), 1)
         dl_label = "UFLD: ON  (red dots)" if dl_active else "UFLD: OFF (no weights)"
@@ -84,4 +86,4 @@ class LaneRenderer:
         bottom = np.hstack((edges_3ch, res_window))
         full_tile = np.vstack((top, bottom))
 
-        return cv2.resize(full_tile, (1280, 720))
+        return cv2.resize(full_tile, self.cfg.debug_tile_size)
