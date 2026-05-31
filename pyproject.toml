@@ -4,17 +4,34 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hybrid-lane-detection"
-version = "0.1.0"
-description = "Hybrid (classical CV + UFLD deep learning) lane detection pipeline."
+version = "0.2.0"
+description = "Modular autonomous-perception pipeline for road video — hybrid lane detection, object detection, and steering estimation under a typed module contract."
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Afonso Costa", email = "afonsocosta90@gmail.com" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Programming Language :: Python :: 3.11",
+    "Operating System :: OS Independent",
+]
 dependencies = [
     "opencv-python>=4.8.0",
     "numpy>=1.24.0",
     "scipy>=1.11.0",
     "torchvision",
     "ufld @ git+https://github.com/afonsocosta90/fast-lane-detection.git@main",
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+    "ultralytics>=8.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
 ]
 
 # torch is intentionally NOT listed — consumers must install the wheel that matches
@@ -24,5 +41,8 @@ dependencies = [
 Repository = "https://github.com/afonsocosta90/hybrid-lane-detection"
 
 [tool.setuptools.packages.find]
-include = ["hybrid_lane_detection*"]
-exclude = ["test-videos*", "weights*"]
+include = ["hybrid_lane_detection*", "perception*"]
+exclude = ["test-videos*", "weights*", "tests*"]
+
+[tool.setuptools.package-data]
+perception = ["configs/*.yaml"]

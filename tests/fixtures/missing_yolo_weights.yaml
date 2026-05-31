@@ -1,0 +1,67 @@
+# Verification fixture for Step 5: objects.weights_path points at a file that does not
+# exist on disk. ObjectsModule.warmup() must raise (Ultralytics can auto-download standard
+# yolov8n.pt — that's why we use a clearly-bogus filename here).
+
+video:
+  path: "test-videos/test_video_1.mp4"
+  window_name: "Perception Pipeline"
+  wait_key_ms: 25
+
+dl:
+  weights_path: "weights/culane_18.pth"
+  dataset: "culane"
+  backbone: "18"
+  device: "auto"
+
+classical:
+  blur_kernel: [3, 3]
+  canny_low: 50
+  canny_high: 150
+  roi_top_left: [400, 350]
+  roi_top_right: [1050, 350]
+  hough_rho: 1.5
+  hough_theta_divisor: 360
+  hough_threshold: 40
+  hough_min_line_length: 100
+  hough_max_line_gap: 50
+  min_angle_deg: 30.0
+  max_angle_deg: 150.0
+  min_points_per_side: 5
+  ema_alpha: 0.3
+  min_trust: 0.4
+  width_min_px: 500.0
+  width_max_px: 1000.0
+  width_target_px: 750.0
+  width_falloff_px: 400.0
+  convergence_ratio_min: 0.1
+  convergence_ratio_max: 0.7
+  convergence_ratio_target: 0.4
+  convergence_falloff: 2.0
+  width_weight: 0.5
+  convergence_weight: 0.25
+  heading_weight: 0.25
+  y_near_offset_px: 50
+  y_far_factor: 0.55
+
+objects:
+  # File that doesn't exist and isn't a standard Ultralytics download target.
+  weights_path: "weights/totally_not_a_real_model_xyz.pt"
+  device: "auto"
+  conf_threshold: 0.35
+  iou_threshold: 0.5
+  keep_classes: ["car", "truck", "person", "bicycle", "motorcycle"]
+  imgsz: 640
+
+steering:
+  lookahead_m: 20.0
+  road_depth_m: 30.0
+  lane_width_m: 3.5
+  y_eval_offset_px: 50
+
+render:
+  render_y_top: 500
+  confidence_threshold: 0.35
+  hud_box_width: 340
+  hud_box_height: 130
+  hud_margin: 10
+  debug_tile_size: [1280, 720]
